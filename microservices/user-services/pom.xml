@@ -12,7 +12,7 @@
 	<artifactId>user-services</artifactId>
 	<version>0.0.1-SNAPSHOT</version>
 	<name>user-services</name>
-	<description>Demo project for Spring Boot</description>
+	<description>For payment</description>
 	<url/>
 	<licenses>
 		<license/>
@@ -37,6 +37,14 @@
 		<dependency>
 			<groupId>org.springframework.boot</groupId>
 			<artifactId>spring-boot-starter-security</artifactId>
+		</dependency>
+		<dependency>
+			<groupId>org.springframework.boot</groupId>
+			<artifactId>spring-boot-starter-validation</artifactId>
+		</dependency>
+		<dependency>
+			<groupId>org.springframework.boot</groupId>
+			<artifactId>spring-boot-starter-web</artifactId>
 		</dependency>
 
 		<dependency>
