@@ -1,10 +1,10 @@
-package com.example.flight_services;
+package com.flighthub.Flight;
 
 import org.junit.jupiter.api.Test;
 import org.springframework.boot.test.context.SpringBootTest;
 
 @SpringBootTest
-class FlightServicesApplicationTests {
+class FlightApplicationTests {
 
 	@Test
 	void contextLoads() {
