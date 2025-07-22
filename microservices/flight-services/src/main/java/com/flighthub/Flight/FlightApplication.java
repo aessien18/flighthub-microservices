@@ -1,13 +1,13 @@
-package com.example.flight_services;
+package com.flighthub.Flight;
 
 import org.springframework.boot.SpringApplication;
 import org.springframework.boot.autoconfigure.SpringBootApplication;
 
 @SpringBootApplication
-public class FlightServicesApplication {
+public class FlightApplication {
 
 	public static void main(String[] args) {
-		SpringApplication.run(FlightServicesApplication.class, args);
+		SpringApplication.run(FlightApplication.class, args);
 	}
 
 }
