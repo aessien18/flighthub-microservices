@@ -26,7 +26,7 @@ public class HelloController {
             @RequestParam(required = false) String airport,
             @RequestParam(required = false) String date
     ) {
-        List<FlightInfo> flights = flightService.searchFlights(number, airline, airport,date);
+        List<FlightInfo> flights = flightService.searchFlights(number, airline, airport, date);
 
         if (flights.isEmpty()) {
             return ResponseEntity.badRequest()
@@ -34,5 +34,25 @@ public class HelloController {
         }
 
         return ResponseEntity.ok(flights);
+    }
+
+    // NEW ENDPOINT FOR RANDOM FLIGHT FEATURE
+    @GetMapping("/flight/random")
+    public ResponseEntity<?> getRandomFlight() {
+        try {
+            FlightInfo randomFlight = flightService.getRandomFlight();
+            
+            if (randomFlight == null) {
+                return ResponseEntity.badRequest()
+                        .body(new ApiError("Unable to fetch a random flight at this time."));
+            }
+            
+            return ResponseEntity.ok(randomFlight);
+            
+        } catch (Exception e) {
+            e.printStackTrace();
+            return ResponseEntity.status(500)
+                    .body(new ApiError("Server error while fetching random flight."));
+        }
     }
 }
