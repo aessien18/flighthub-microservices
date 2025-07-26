@@ -6,6 +6,9 @@ public class AirlineInfo {
     private String icao;
     private String logo;
 
+    public AirlineInfo() {
+    }
+
     public AirlineInfo(String name, String iata, String icao, String logo) {
         this.name = name;
         this.iata = iata;
@@ -13,8 +16,36 @@ public class AirlineInfo {
         this.logo = logo;
     }
 
-    public String getName() { return name; }
-    public String getIata() { return iata; }
-    public String getIcao() { return icao; }
-    public String getLogo() { return logo; }
+    public String getName() {
+        return name;
+    }
+
+    public void setName(String name) {
+        this.name = name;
+    }
+
+    public String getIata() {
+        return iata;
+    }
+
+    public void setIata(String iata) {
+        this.iata = iata;
+    }
+
+    public String getIcao() {
+        return icao;
+    }
+
+    public void setIcao(String icao) {
+        this.icao = icao;
+    }
+
+    public String getLogo() {
+        return logo;
+    }
+
+    public void setLogo(String logo) {
+        this.logo = logo;
+    }
 }
+

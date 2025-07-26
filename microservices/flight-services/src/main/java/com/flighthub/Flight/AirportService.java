@@ -35,7 +35,7 @@ public class AirportService {
                     double longitude = Double.parseDouble(parts[7]);
 
                     if (iata != null && !iata.isEmpty() && !iata.equals("\\N")) {
-                        airportMap.put(iata, new AirportInfo(name, iata, icao, latitude, longitude, city, country));
+                        airportMap.put(iata, new AirportInfo(name, city, country, iata, icao, latitude, longitude, null));
                     }
                 }
             }
