@@ -1,56 +1,25 @@
 package com.flighthub.Flight;
 
+import com.fasterxml.jackson.databind.MappingIterator;
+import com.fasterxml.jackson.dataformat.csv.CsvMapper;
+import com.fasterxml.jackson.dataformat.csv.CsvSchema;
+import org.springframework.core.io.ClassPathResource;
 import org.springframework.stereotype.Service;
+import reactor.core.publisher.Flux;
 
-import jakarta.annotation.PostConstruct;
-import java.io.BufferedReader;
-import java.io.InputStreamReader;
-import java.util.ArrayList;
-import java.util.List;
+import java.io.File;
 
 @Service
 public class AirlineService {
-
-    private final List<AirlineInfo> airlineList = new ArrayList<>();
-
-    @PostConstruct
-    public void init() {
+    public Flux<AirlineInfo> getAllAirlines() {
         try {
-            BufferedReader reader = new BufferedReader(
-                new InputStreamReader(
-                    getClass().getResourceAsStream("/airlines.csv")
-                )
-            );
-
-            String line;
-            boolean isFirstLine = true;
-            while ((line = reader.readLine()) != null) {
-                if (isFirstLine) {
-                    isFirstLine = false; // skip header
-                    continue;
-                }
-
-                String[] parts = line.split(",(?=([^\"]*\"[^\"]*\")*[^\"]*$)");
-
-                if (parts.length >= 4) {
-                    String name = parts[0].replace("\"", "").trim();
-                    String iata = parts[1].replace("\"", "").trim();
-                    String icao = parts[2].replace("\"", "").trim();
-                    String logo = parts[3].replace("\"", "").trim();
-
-                    airlineList.add(new AirlineInfo(name, iata, icao, logo));
-                }
-            }
-            reader.close();
-
-            System.out.println("Loaded " + airlineList.size() + " airlines!");
-
+            File file = new ClassPathResource("airlines.csv").getFile();
+            CsvMapper mapper = new CsvMapper();
+            CsvSchema schema = CsvSchema.emptySchema().withHeader();
+            MappingIterator<AirlineInfo> iterator = mapper.readerFor(AirlineInfo.class).with(schema).readValues(file);
+            return Flux.fromIterable(iterator.readAll());
         } catch (Exception e) {
-            e.printStackTrace();
+            throw new RuntimeException("Failed to read airlines.csv", e);
         }
-    }
-
-    public List<AirlineInfo> getAllAirlines() {
-        return airlineList;
     }
 }

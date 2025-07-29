@@ -1,13 +1,14 @@
 package com.flighthub.Flight;
 
 import com.fasterxml.jackson.databind.JsonNode;
-import com.fasterxml.jackson.databind.ObjectMapper;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
-import org.springframework.web.client.RestTemplate;
+import org.springframework.web.reactive.function.client.WebClient;
+import reactor.core.publisher.Flux;
+import reactor.core.publisher.Mono;
 
-import java.util.ArrayList;
-import java.util.List;
+import java.time.Duration;
+import java.time.OffsetDateTime;
 
 @Service
 public class FlightService {
@@ -16,93 +17,122 @@ public class FlightService {
     private String apiKey;
 
     private final AirportService airportService;
+    private final WebClient webClient;
 
-    public FlightService(AirportService airportService) {
+    public FlightService(AirportService airportService, WebClient webClient) {
         this.airportService = airportService;
+        this.webClient = webClient;
     }
 
-    public List<FlightInfo> searchFlights(String number, String airline, String airport, String date) {
-        String baseUrl = "http://api.aviationstack.com/v1/flights?access_key=" + apiKey;
+    public Flux<FlightInfo> searchFlights(String number, String airline, String airport, String date) {
+        if ((number == null || number.isEmpty()) && (airline == null || airline.isEmpty()) && (airport == null || airport.isEmpty())) {
+            return Flux.empty();
+        }   return fetchFlightData(number, airline, airport, date)
+                .flatMapMany(this::processFlightData);
+    }
 
-        if (number != null && !number.isEmpty()) {
-            baseUrl += "&flight_iata=" + number;
-        } else if (airline != null && !airline.isEmpty()) {
-            baseUrl += "&airline_iata=" + airline;
-        } else if (airport != null && !airport.isEmpty()) {
-            baseUrl += "&dep_iata=" + airport;
-        } else {
-            return new ArrayList<>();
-        }
-
-        if (date != null && !date.isEmpty()) {
-            baseUrl += "&flight_date=" + date;
-        }
-
-        RestTemplate restTemplate = new RestTemplate();
-        String rawJson = restTemplate.getForObject(baseUrl, String.class);
-
-        List<FlightInfo> result = new ArrayList<>();
-
-        try {
-            ObjectMapper mapper = new ObjectMapper();
-            JsonNode root = mapper.readTree(rawJson);
-            JsonNode data = root.path("data");
-
-            if (data.isArray()) {
-                for (JsonNode flight : data) {
-                    FlightInfo info = new FlightInfo();
-                    info.setFlightNumber(flight.path("flight").path("iata").asText());
-                    info.setStatus(flight.path("flight_status").asText());
-                    info.setDepartureAirport(flight.path("departure").path("airport").asText());
-                    info.setDepartureGate(flight.path("departure").path("gate").asText());
-                    info.setScheduledDeparture(flight.path("departure").path("scheduled").asText());
-                    info.setActualDeparture(flight.path("departure").path("actual").asText());
-                    info.setArrivalAirport(flight.path("arrival").path("airport").asText());
-                    info.setArrivalGate(flight.path("arrival").path("gate").asText());
-                    info.setScheduledArrival(flight.path("arrival").path("scheduled").asText());
-                    info.setActualArrival(flight.path("arrival").path("actual").asText());
-                    info.setDelay(flight.path("departure").path("delay").asInt());
-
-                    String depIata = flight.path("departure").path("iata").asText();
-                    String arrIata = flight.path("arrival").path("iata").asText();
-
-                    AirportInfo depAirport = airportService.getAirportByIata(depIata);
-                    AirportInfo arrAirport = airportService.getAirportByIata(arrIata);
-
-                    if (depAirport != null) {
-                        info.setDepartureLatitude(depAirport.getLatitude());
-                        info.setDepartureLongitude(depAirport.getLongitude());
-                        info.setDepartureCity(depAirport.getCity());
-                        info.setDepartureCountry(depAirport.getCountry());
-                    } else {
-                        info.setDepartureLatitude(0);
-                        info.setDepartureLongitude(0);
+    public Mono<FlightInfo> getRandomFlight() {
+        return fetchFlightData(null, null, null, null)
+                .flatMapMany(this::processFlightData)
+                .collectList()
+                .flatMap(flights -> {
+                    if (flights.isEmpty()) {
+                        return Mono.empty();
                     }
+                    int randomIndex = (int) (Math.random() * flights.size());
+                    return Mono.just(flights.get(randomIndex));
+                });
+    }
 
-                    if (arrAirport != null) {
-                        info.setArrivalLatitude(arrAirport.getLatitude());
-                        info.setArrivalLongitude(arrAirport.getLongitude());
-                        info.setArrivalCity(arrAirport.getCity());
-                        info.setArrivalCountry(arrAirport.getCountry());
-                    } else {
-                        info.setArrivalLatitude(0);
-                        info.setArrivalLongitude(0);
+    private Mono<JsonNode> fetchFlightData(String number, String airline, String airport, String date) {
+        String baseUrl = "http://api.aviationstack.com/v1/flights";
+        return webClient.get()
+                .uri(baseUrl, uriBuilder -> {
+                    uriBuilder.queryParam("access_key", apiKey);
+                    if (number != null && !number.isEmpty()) {
+                        uriBuilder.queryParam("flight_iata", number);
+                    } else if (airline != null && !airline.isEmpty()) {
+                        uriBuilder.queryParam("airline_iata", airline);
+                    } else if (airport != null && !airport.isEmpty()) {
+                        uriBuilder.queryParam("dep_iata", airport);
                     }
+                    if (date != null && !date.isEmpty()) {
+                        uriBuilder.queryParam("flight_date", date);
+                    }
+                    if (number == null && airline == null && airport == null && date == null) {
+                        uriBuilder.queryParam("limit", 100);
+                    }
+                    return uriBuilder.build();
+                })
+                .retrieve()
+                .bodyToMono(JsonNode.class)
+                .doOnError(e -> {
+                    throw new FlightServiceException("Error fetching flight data from aviationstack API", e);
+                });
+    }
 
-                    String scheduled = flight.path("arrival").path("scheduled").asText();
-                    String actual = flight.path("arrival").path("actual").asText();
-                    int delayMinutes = calculateDelayMinutes(scheduled, actual);
-                    info.setDelayMinutes(delayMinutes);
+    private Flux<FlightInfo> processFlightData(JsonNode root) {
+        JsonNode data = root.path("data");
+        if (data.isArray()) {
+            return Flux.fromIterable(data)
+                    .flatMap(this::createFlightInfo);
+        }
+        return Flux.empty();
+    }
 
-                    result.add(info);
-                }
-            }
+    private Mono<FlightInfo> processSingleFlight(JsonNode root) {
+        JsonNode data = root.path("data");
+        if (data.isArray() && data.size() > 0) {
+            return createFlightInfo(data.get(0));
+        }
+        return Mono.empty();
+    }
 
-        } catch (Exception e) {
-            e.printStackTrace();
+    private Mono<FlightInfo> createFlightInfo(JsonNode flight) {
+        String depIata = flight.path("departure").path("iata").asText();
+        String arrIata = flight.path("arrival").path("iata").asText();
+
+        AirportInfo depAirport = airportService.getAirportByIata(depIata);
+        AirportInfo arrAirport = airportService.getAirportByIata(arrIata);
+
+        if (depAirport == null) {
+            System.out.println("Could not find departure airport for IATA: " + depIata);
+            return Mono.empty();
+        }
+        if (arrAirport == null) {
+            System.out.println("Could not find arrival airport for IATA: " + arrIata);
+            return Mono.empty();
         }
 
-        return result;
+        FlightInfo info = new FlightInfo();
+        info.setFlightNumber(flight.path("flight").path("iata").asText());
+        info.setStatus(flight.path("flight_status").asText());
+        info.setDepartureAirport(flight.path("departure").path("airport").asText());
+        info.setDepartureGate(flight.path("departure").path("gate").asText());
+        info.setScheduledDeparture(flight.path("departure").path("scheduled").asText());
+        info.setActualDeparture(flight.path("departure").path("actual").asText());
+        info.setArrivalAirport(flight.path("arrival").path("airport").asText());
+        info.setArrivalGate(flight.path("arrival").path("gate").asText());
+        info.setScheduledArrival(flight.path("arrival").path("scheduled").asText());
+        info.setActualArrival(flight.path("arrival").path("actual").asText());
+        info.setDelay(flight.path("departure").path("delay").asInt());
+
+        info.setDepartureLatitude(depAirport.getLatitude());
+        info.setDepartureLongitude(depAirport.getLongitude());
+        info.setDepartureCity(depAirport.getCity());
+        info.setDepartureCountry(depAirport.getCountry());
+
+        info.setArrivalLatitude(arrAirport.getLatitude());
+        info.setArrivalLongitude(arrAirport.getLongitude());
+        info.setArrivalCity(arrAirport.getCity());
+        info.setArrivalCountry(arrAirport.getCountry());
+
+        String scheduled = flight.path("arrival").path("scheduled").asText();
+        String actual = flight.path("arrival").path("actual").asText();
+        int delayMinutes = calculateDelayMinutes(scheduled, actual);
+        info.setDelayMinutes(delayMinutes);
+
+        return Mono.just(info);
     }
 
     private int calculateDelayMinutes(String scheduled, String actual) {
@@ -111,14 +141,14 @@ public class FlightService {
         }
 
         try {
-            java.time.OffsetDateTime scheduledTime = java.time.OffsetDateTime.parse(scheduled);
-            java.time.OffsetDateTime actualTime = java.time.OffsetDateTime.parse(actual);
+            OffsetDateTime scheduledTime = OffsetDateTime.parse(scheduled);
+            OffsetDateTime actualTime = OffsetDateTime.parse(actual);
 
-            long diffMinutes = java.time.Duration.between(scheduledTime, actualTime).toMinutes();
+            long diffMinutes = Duration.between(scheduledTime, actualTime).toMinutes();
             return (int) diffMinutes;
 
         } catch (Exception e) {
-            e.printStackTrace();
+            // Log the error appropriately
             return 0;
         }
     }
