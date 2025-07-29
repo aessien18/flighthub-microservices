@@ -1,49 +1,37 @@
 package com.example.carbooking_services.controller;
 
 import com.example.carbooking_services.model.RideBooking;
-import com.example.carbooking_services.service.RideBookingService;
-import lombok.Data;
+import com.example.carbooking_services.repository.RideBookingRepository;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 @RestController
 @RequestMapping("/api/rides")
+@CrossOrigin(origins = "*") // Allows React Native to connect
 public class RideBookingController {
 
-    private final RideBookingService service;
+    private static final Logger logger = LoggerFactory.getLogger(RideBookingController.class);
 
-    public RideBookingController(RideBookingService service) {
-        this.service = service;
-    }
+    @Autowired
+    private RideBookingRepository rideBookingRepository;
 
     @PostMapping("/book")
-    public ResponseEntity<RideBooking> bookRide(@RequestBody RideBookingRequest request) {
-        // Convert request DTO to entity
-        RideBooking booking = new RideBooking();
-        booking.setPickup(request.getPickup());
-        booking.setDestination(request.getDestination());
-        booking.setDistance(request.getDistance());
-        booking.setFare(request.getFare());
-        booking.setRideType(request.getRideType());
+    public ResponseEntity<?> bookRide(@RequestBody RideBooking ride) {
+        try {
+            logger.info("📦 Booking ride from '{}' to '{}', type: {}, fare: {}, distance: {}km",
+                    ride.getPickup(), ride.getDestination(), ride.getRideType(), ride.getFare(), ride.getDistance());
 
-        RideBooking saved = service.saveBooking(booking);
-        return ResponseEntity.ok(saved); // Return the saved object as JSON
-    }
+            RideBooking savedRide = rideBookingRepository.save(ride);
 
-    // ✅ Optional GET endpoint for testing
-    @GetMapping("/all")
-    public ResponseEntity<?> getAll() {
-        return ResponseEntity.ok(service.getAllBookings());
-    }
-
-    // ✅ Request DTO
-    @Data
-    static class RideBookingRequest {
-        private String pickup;
-        private String destination;
-        private double distance;
-        private double fare;
-        private String rideType;
+            logger.info("✅ Ride booked successfully: {}", savedRide.getId());
+            return ResponseEntity.ok(savedRide);
+        } catch (Exception e) {
+            logger.error("❌ Failed to book ride", e);
+            return ResponseEntity.status(500).body("Failed to book ride: " + e.getMessage());
+        }
     }
 }
 
